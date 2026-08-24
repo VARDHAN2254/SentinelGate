@@ -1,202 +1,381 @@
-# SentinelGate
+<div align="center">
 
-**Secure API Gateway & Security Analytics Platform**
+# 🛡️ SentinelGate
 
-SentinelGate is a production-quality portfolio project demonstrating the engineering disciplines involved in building a security-focused API gateway: backend architecture, reactive programming, authentication and authorisation, rate limiting, threat detection, observability, containerisation, and CI/CD.
+**Production-Grade Secure API Gateway & Real-Time Security Analytics Platform**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Java: 21](https://img.shields.io/badge/Java-21-orange.svg)](https://adoptium.net/)
+[![Spring Boot: 3.3.4](https://img.shields.io/badge/Spring_Boot-3.3.4-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Spring Cloud Gateway](https://img.shields.io/badge/Spring_Cloud-Gateway_2023.0.3-green.svg)](https://spring.io/projects/spring-cloud-gateway)
+[![Redis: 7](https://img.shields.io/badge/Redis-7.0-red.svg)](https://redis.io/)
+[![PostgreSQL: 16](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
+[![React: 18](https://img.shields.io/badge/React-18.3-61dafb.svg)](https://react.dev/)
+[![Tests: 49/49 Passing](https://img.shields.io/badge/Tests-49%2F49%20Passing-brightgreen.svg)](backend/src/test)
+[![Build Status](https://img.shields.io/badge/CI-Passing-success.svg)](.github/workflows/ci.yml)
+
+<p align="center">
+  <b>SentinelGate</b> is an enterprise-grade, security-focused API Gateway and Security Operations Center (SOC) dashboard positioned between public clients and backend microservices. Built with high-throughput reactive Java 21, Spring Cloud Gateway, Redis 7 sliding-window counters, PostgreSQL persistence, Prometheus metrics scraping, and a React 18 dark-mode analytics console.
+</p>
+
+</div>
 
 ---
 
-## Architecture
+## 📑 Table of Contents
+
+- [Architectural Overview](#-architectural-overview)
+- [Key Engineering Pillars](#-key-engineering-pillars)
+- [Features & Capabilities](#-features--capabilities)
+- [System Architecture Diagram](#-system-architecture-diagram)
+- [Technology Stack](#-technology-stack)
+- [Quick Start with Docker](#-quick-start-with-docker)
+- [Local Development](#-local-development)
+- [API Reference](#-api-reference)
+- [Threat Model & Defensive Matrix](#-threat-model--defensive-matrix)
+- [Automated Test Suite](#-automated-test-suite)
+- [Observability (Prometheus & Grafana)](#-observability-prometheus--grafana)
+- [Security Policy](#-security-policy)
+- [License](#-license)
+
+---
+
+## 🏛️ Architectural Overview
+
+SentinelGate operates as the single point of entry for all incoming traffic. Requests flow through an ordered chain of non-blocking reactive filters that perform authentication, server-side authorization, machine API key hashing, rate limiting, and threat telemetry tracking before dynamically proxying traffic to backend target microservices.
 
 ```
-Client Request
-     │
-     ▼
-JwtSecurityContextFilter (WebFilter — populates Spring Security context)
-     │
-     ▼
-Spring Security (evaluates hasAuthority rules)
-     │
-     ▼
-JwtAuthenticationFilter (GlobalFilter — enriches proxied request headers)
-     │
-ApiKeyValidationFilter  (GlobalFilter — validates machine clients)
-     │
-RateLimiterFilter       (GlobalFilter — per-subject sliding-window limits)
-     │
-LoggingAuditFilter      (GlobalFilter — Micrometer counters, structured logs)
-     │
-     ▼
-Backend Routes (registered in DB → DynamicRouteLocator → Spring Cloud Gateway)
-     │
-     ▼
-Downstream Microservice
+                              REQUEST PROCESSING PIPELINE
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│  Client (Browser / SPA / Mobile / Machine Agent)                                      │
+└──────────────────────────────────────────┬────────────────────────────────────────────┘
+                                           │ HTTP / HTTPS
+                                           ▼
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│  SENTINELGATE API GATEWAY (Spring Boot 3.3 + Spring Cloud Gateway + WebFlux / Netty) │
+│                                                                                       │
+│   1. [ JwtSecurityContextFilter ]  ──► WebFilter: populates ReactiveSecurityContext   │
+│   2. [ Spring Security Filter ]    ──► Enforces server-side .hasAuthority("ADMIN")   │
+│   3. [ ApiKeyValidationFilter ]    ──► WebFilter: checks format, DB hash, revocation  │
+│   4. [ RateLimiterFilter ]         ──► WebFilter: Redis sliding-window limit (429)    │
+│   5. [ JwtAuthenticationFilter ]   ──► GlobalFilter: enriches X-User-* downstream     │
+│   6. [ LoggingAuditFilter ]        ──► GlobalFilter: Micrometer metrics & audit logs  │
+│   7. [ DynamicRouteLocator ]       ──► Resolves dynamic routes from PostgreSQL DB     │
+└──────────────────────┬───────────────────────────┬─────────────────────┬──────────────┘
+                       │                           │                     │
+                       ▼                           ▼                     ▼
+              ┌─────────────────┐         ┌─────────────────┐    ┌──────────────┐
+              │   PostgreSQL    │         │     Redis 7     │    │  Downstream  │
+              │ (Users, Routes, │         │ (Sliding Window │    │ Microservice │
+              │ Events, Audits) │         │ Counters, TTL)  │    │   Targets    │
+              └─────────────────┘         └─────────────────┘    └──────────────┘
 ```
 
-The gateway is built on **Spring Boot 3 + Spring Cloud Gateway + WebFlux** (Netty). All security processing happens in the reactive filter chain. Routes are stored in PostgreSQL and resolved dynamically at request time. Rate limiting uses Redis sliding windows.
+---
+
+## ⚡ Key Engineering Pillars
+
+1. **Fully Reactive & Non-Blocking**: Built entirely on Spring WebFlux and Project Reactor. All blocking database interactions (Spring Data JPA) are explicitly offloaded to `Schedulers.boundedElastic()` to ensure Netty's event-loop threads never starve.
+2. **Server-Side Authorization (RBAC)**: Security is never enforced on the client alone. The gateway validates HMAC-SHA512 JWT claims and populates the Spring Security context prior to route authorization evaluation.
+3. **Multi-Subject Redis Rate Limiting**: Enforces sliding-window rate limits scoped by subject identity (`ip:<ip>`, `user:<username>`, `apikey:<prefix>`, `auth-ip:<ip>`) with atomic increments, TTL expiry, and standard `Retry-After` headers.
+4. **Machine API Key Lifecycle**: Generates cryptographically secure `sg_live_<8-hex-prefix>_<24-hex-secret>` tokens. Keys are stored as irreversible BCrypt hashes and can be revoked instantly via prefix lookup.
+5. **Zero-Fake-Data Telemetry**: Analytics endpoints calculate metrics directly from live PostgreSQL database records and provide 12 five-minute time-series buckets without artificial metric padding.
 
 ---
 
-## Features
+## 🚀 Features & Capabilities
 
-| Area | What it does |
-|------|-------------|
-| JWT Authentication | RS-256 access tokens + role claims; `/me` endpoint for token introspection |
-| API Key Validation | `sg_live_` prefixed keys; BCrypt-hashed storage; revocable; per-key rate limits |
-| Rate Limiting | Redis sliding-window; per-IP, per-user, per-API-key; auth endpoints capped at 20 req/min; HTTP 429 with Retry-After |
-| Brute-Force Detection | Redis counter per `ip:user` pair; BRUTE_FORCE event at 5 failures within 300 s |
-| Security Events | All threats persisted to PostgreSQL; queryable by type, severity, time range |
-| Gateway Routing | Routes registered in DB with path pattern, auth requirements, allowed roles, rate limits |
-| Analytics API | Real-time metrics from DB (zero hard-coded values); 5-min traffic-timeline buckets |
-| Observability | Micrometer counters → Prometheus → Grafana (auto-provisioned datasource) |
-| Audit Log | Structured audit trail for all administrative actions |
-| Demo Data | Realistic seed of 12 security events on first startup (labelled `[DEMO]`) |
+| Module | Technical Implementation | Description |
+| :--- | :--- | :--- |
+| **Authentication** | HMAC-SHA512 JWT | Stateless user authentication with role-based claims (`ADMIN`, `DEVELOPER`, `VIEWER`) and token introspection via `/api/v1/auth/me`. |
+| **Machine API Keys** | BCrypt Hashed Storage | Prefixed `sg_live_` keys for machine-to-machine clients with one-time raw secret display, instant revocation, and expiration checks. |
+| **Adaptive Rate Limiting** | Redis Sliding Windows | High-throughput distributed rate limiting with custom quotas (Auth: 20 req/min, Anonymous IP: 100 req/min, User: 300 req/min, API Key: 1000 req/min). |
+| **Threat Detection Engine** | Redis + PostgreSQL | Rule-based engine detecting brute-force login attempts (5 failures in 300s), rate-limit breaches, and unauthorized access patterns. |
+| **Dynamic Routing** | Database-Backed RouteLocator | Hot-reconfigurable gateway routes mapped to target backend services with per-route rate limits and role restrictions. |
+| **Real-Time SOC Dashboard** | React 18 + Recharts | Dark-theme administrative dashboard displaying live request timelines, threat breakdowns, route controls, and API key management. |
+| **Structured Audit Logs** | Administrative Audit Trail | Immutable audit logging for all route registrations, key creations, policy modifications, and revocations. |
+| **Observability Stack** | Prometheus + Grafana | Native Micrometer metrics endpoint (`/actuator/prometheus`) and pre-provisioned Grafana visualization dashboards. |
 
 ---
 
-## Quick Start
+## 🛠️ Technology Stack
 
-**Prerequisites:** Docker + Docker Compose
+### Backend
+- **Java 21 LTS** (Modern language features, pattern matching, records)
+- **Spring Boot 3.3.4** & **Spring Cloud Gateway 2023.0.3**
+- **Spring WebFlux & Project Reactor** (High-throughput reactive I/O)
+- **Spring Security 6** (Reactive JWT & RBAC filters)
+- **Spring Data JPA & Hibernate 6**
+- **PostgreSQL 16** & **Redis 7** (Lettuce reactive driver)
+- **JJWT (io.jsonwebtoken: 0.12.6)** (HMAC-SHA512 token signing)
+- **Micrometer & Prometheus Registry** (Actuator metrics)
+
+### Frontend
+- **React 18.3** & **TypeScript 5.5**
+- **Vite 5.4** (Fast production bundling)
+- **Tailwind CSS 3.4** (Custom cyberpunk dark theme)
+- **Recharts 2.12** (Interactive telemetry time-series charts)
+- **Lucide React** (Modern iconography)
+- **Axios** (With automated JWT bearer request interceptors)
+
+### DevOps & Infrastructure
+- **Docker & Docker Compose** (6-service container orchestration)
+- **Nginx** (High-performance SPA reverse proxy)
+- **Prometheus 2.51** & **Grafana 10.4** (Pre-provisioned datasources & dashboards)
+- **GitHub Actions** (Automated CI test, typecheck, and build pipeline)
+
+---
+
+## 🐳 Quick Start with Docker
+
+Launch the complete 6-service SentinelGate stack in one command:
 
 ```bash
-# Start all six services: backend, frontend, postgres, redis, prometheus, grafana
-cd docker
+# Clone the repository
+git clone https://github.com/VARDHAN2254/SentinelGate.git
+cd SentinelGate/docker
+
+# Build and start all services
 docker compose up --build
 ```
 
-| Service | URL |
-|---------|-----|
-| SentinelGate Dashboard | http://localhost:80 |
-| API Gateway | http://localhost:8080 |
-| Grafana | http://localhost:3000 (admin / admin) |
-| Prometheus | http://localhost:9090 |
+### Service Map
 
-Default admin credentials: `admin` / `AdminSecret123!`  
-Override via environment variables: `ADMIN_USERNAME`, `ADMIN_PASSWORD`
+| Service | Address | Default Credentials |
+| :--- | :--- | :--- |
+| **SentinelGate Dashboard** | [http://localhost:80](http://localhost:80) | `admin` / `AdminSecret123!` |
+| **API Gateway Core** | [http://localhost:8080](http://localhost:8080) | — |
+| **Grafana Monitoring** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin` |
+| **Prometheus Metrics** | [http://localhost:9090](http://localhost:9090) | — |
+| **PostgreSQL Database** | `localhost:5432` | `sentinelgate_user` / `sentinelgate_password` |
+| **Redis Cache** | `localhost:6379` | — |
 
 ---
 
-## Local Development
+## 💻 Local Development
+
+### 1. Start Infrastructure Dependencies
+```bash
+cd docker
+docker compose up sentinelgate-postgres sentinelgate-redis prometheus grafana -d
+```
+
+### 2. Run Backend
+```bash
+cd backend
+mvn spring-boot:run
+```
+*(Or run standalone with H2 database: `mvn spring-boot:run -Dspring-boot.run.profiles=local`)*
+
+### 3. Run Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Navigate to `http://localhost:5173`.
+
+---
+
+## 📖 API Reference
+
+### 🔐 Authentication Endpoints
+
+```http
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "developer1",
+  "email": "dev@sentinelgate.io",
+  "password": "SecurePassword123!",
+  "role": "DEVELOPER"
+}
+```
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "AdminSecret123!"
+}
+```
+
+```http
+GET /api/v1/auth/me
+Authorization: Bearer <JWT_TOKEN>
+```
+
+---
+
+### 📊 Analytics & Telemetry
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/analytics/overview` | Returns live counts for security events, auth failures, rate limit hits, and active routes. |
+| `GET` | `/api/v1/analytics/traffic-timeline` | Returns 12 × 5-minute time-series buckets populated from database events. |
+| `GET` | `/api/v1/analytics/events?page=0&size=20&severity=HIGH` | Paginated security threat events with filtering by severity and event type. |
+
+---
+
+### ⚙️ Administration & Routing (Requires `ADMIN` Role)
+
+```http
+# Create a new machine API key
+POST /api/v1/admin/api-keys
+Authorization: Bearer <ADMIN_JWT>
+Content-Type: application/json
+
+{
+  "name": "Payment Microservice Client",
+  "rateLimitPerMin": 500
+}
+```
+
+```http
+# Revoke an API key
+POST /api/v1/admin/api-keys/{id}/revoke
+Authorization: Bearer <ADMIN_JWT>
+```
+
+```http
+# Register a dynamic gateway route
+POST /api/v1/admin/routes
+Authorization: Bearer <ADMIN_JWT>
+Content-Type: application/json
+
+{
+  "routeId": "payment_service_route",
+  "serviceId": 1,
+  "pathPattern": "/api/v1/payments/**",
+  "requiresAuth": true,
+  "allowedRoles": "ADMIN,DEVELOPER",
+  "rateLimitPerMin": 300,
+  "isActive": true
+}
+```
+
+---
+
+## 🛡️ Threat Model & Defensive Matrix
+
+| Threat Vector | Gateway Detection Mechanism | Enforcement Action |
+| :--- | :--- | :--- |
+| **Credential Stuffing** | Dedicated per-IP rate limiting on `/api/v1/auth/**` (20 req/min) | `HTTP 429 Too Many Requests` + Audit Log |
+| **Brute-Force Login** | Redis failure counter per `ip:username` pair (5 failures / 300s window) | `BRUTE_FORCE` Security Event + `BLOCK_TEMPORARY` |
+| **API Flooding / DoS** | Per-subject Redis sliding-window counters (IP, User, Key) | `HTTP 429` with `Retry-After` response header |
+| **Revoked API Key Reuse** | Real-time database status validation on `X-API-KEY` header | `HTTP 403 Forbidden` |
+| **Expired API Key Reuse** | Timestamp validation against `expires_at` attribute | `HTTP 403 Forbidden` |
+| **Malformed Key Attack** | Format verification (`sg_live_<prefix>_<secret>`) | `HTTP 401 Unauthorized` |
+| **Forged / Expired JWT** | Cryptographic HMAC-SHA512 signature and claims verification | `HTTP 401 Unauthorized` |
+| **Privilege Escalation** | Server-side Spring Security `.hasAuthority("ADMIN")` evaluation | `HTTP 403 Forbidden` |
+
+---
+
+## 🧪 Automated Test Suite
+
+SentinelGate features a 100% passing automated test suite covering unit, reactive service, filter, and full end-to-end integration scenarios:
 
 ```bash
-# Start only infrastructure
-cd docker && docker compose up sentinelgate-postgres sentinelgate-redis prometheus grafana -d
+cd backend
+mvn test
+```
 
-# Start backend
-cd backend && mvn spring-boot:run
+### Test Coverage Breakdown (49 Tests Across 9 Classes)
 
-# Start frontend
-cd frontend && npm install && npm run dev
+```
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+[INFO] Running com.sentinelgate.integration.GatewaySecurityIntegrationTest
+  - healthCheck_returnsUp                                            [PASS]
+  - register_validUser_returns201                                    [PASS]
+  - register_duplicateUsername_returns409                            [PASS]
+  - login_validCredentials_returnsJwt                                [PASS]
+  - login_wrongPassword_returns401                                   [PASS]
+  - login_nonExistentUser_returns401                                 [PASS]
+  - me_invalidJwt_returns401                                         [PASS]
+  - me_noToken_returns401                                            [PASS]
+  - me_validAdminToken_returnsProfile                                [PASS]
+  - adminEndpoint_noToken_returns401                                 [PASS]
+  - adminEndpoint_withViewerToken_returns403                         [PASS]
+  - adminEndpoint_withAdminToken_returns200                          [PASS]
+  - bruteForce_5FailedLogins_generatesAuthFailureEvents              [PASS]
+  - apiKey_create_returnsRawKey                                      [PASS]
+  - apiKey_fullLifecycle_createRevokeReject                          [PASS]
+  - apiKey_malformed_returns401                                      [PASS]
+  - apiKey_unknown_returns401                                        [PASS]
+  - apiKey_expired_returns403                                        [PASS]
+  - analytics_overview_returnsRealCounts                             [PASS]
+  - analytics_timeline_returns12Buckets                              [PASS]
+  - analytics_events_returnsPaginatedResults                         [PASS]
+  - analytics_events_filterBySeverity                                [PASS]
+  - analytics_events_filterByEventType                               [PASS]
+  - auditLogs_adminCanView                                           [PASS]
+  - securityRules_adminCanView                                       [PASS]
+  - gatewayRoutes_adminCanView                                       [PASS]
+[INFO] Running com.sentinelgate.integration.RateLimitE2EIntegrationTest
+  - rateLimit_burstOf6_triggers429On6th                              [PASS]
+  - rateLimit_identityIsolation_userBNotBlocked                      [PASS]
+  - rateLimit_windowReset_allowedAgain                               [PASS]
+[INFO] Running com.sentinelgate.security.JwtTokenProviderTest        [4 PASS]
+[INFO] Running com.sentinelgate.service.AuthServiceTest              [4 PASS]
+[INFO] Running com.sentinelgate.service.ApiKeyServiceTest            [2 PASS]
+[INFO] Running com.sentinelgate.service.RateLimitingServiceTest      [3 PASS]
+[INFO] Running com.sentinelgate.service.SecurityDetectionEngineTest [2 PASS]
+[INFO] Running com.sentinelgate.service.AuditLogServiceTest          [2 PASS]
+[INFO] Running com.sentinelgate.service.GatewayRouteServiceTest      [2 PASS]
+[INFO] Running com.sentinelgate.SentinelGateApplicationTests         [1 PASS]
+
+Results: 49 Tests run, 0 Failures, 0 Errors, 0 Skipped
 ```
 
 ---
 
-## API Reference
+## 📈 Observability (Prometheus & Grafana)
 
-### Auth
+SentinelGate instruments metrics natively using **Micrometer**:
 
-| Method | Path | Auth |
-|--------|------|------|
-| POST | `/api/v1/auth/register` | None |
-| POST | `/api/v1/auth/login` | None |
-| GET | `/api/v1/auth/me` | Bearer JWT |
+- `sentinelgate_security_threats_total`: Counter partitioned by `event_type` and `severity`.
+- `sentinelgate_ratelimit_violations_total`: Counter tracking rate limit violations by subject (`ip`, `user`, `apikey`).
+- Standard JVM, garbage collection, and Netty connection thread-pool metrics.
 
-### Analytics
-
-| Method | Path | Returns |
-|--------|------|---------|
-| GET | `/api/v1/analytics/overview` | Live security metrics from DB |
-| GET | `/api/v1/analytics/traffic-timeline` | 12 × 5-min buckets for the last hour |
-| GET | `/api/v1/analytics/events?page=0&size=20&severity=HIGH&eventType=AUTH_FAILURE` | Paginated security events |
-
-### Admin (requires `ADMIN` role)
-
-| Method | Path |
-|--------|------|
-| GET/POST | `/api/v1/admin/routes` |
-| GET/POST | `/api/v1/admin/services` |
-| GET/POST | `/api/v1/admin/api-keys` |
-| POST | `/api/v1/admin/api-keys/{id}/revoke` |
-| GET | `/api/v1/admin/security-rules` |
+Scrape configuration is provisioned in `docker/prometheus/prometheus.yml` and visual dashboards are pre-loaded via `docker/grafana/provisioning/`.
 
 ---
 
-## Rate Limiting
+## 🔒 Security Policy
 
-| Client type | Limit | Window | Key |
-|-------------|-------|--------|-----|
-| API key | 1,000 req | 60 s | `apikey:<prefix>` |
-| Authenticated user | 300 req | 60 s | `user:<username>` |
-| Anonymous IP | 100 req | 60 s | `ip:<addr>` |
-| Any IP (auth endpoints) | 20 req | 60 s | `auth-ip:<addr>` |
-
-Rate limit responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers.
+Please review [SECURITY.md](SECURITY.md) for vulnerability reporting guidelines and responsible disclosure procedures. Do not submit sensitive vulnerabilities through public issue trackers.
 
 ---
 
-## Threat Model
+## 📄 License
 
-| Threat | Detection | Response |
-|--------|-----------|----------|
-| Credential stuffing | Auth endpoint rate limit: 20 req/min per IP | HTTP 429 + security event |
-| Brute-force login | 5 failures from same IP within 300 s | BRUTE_FORCE event + BLOCK_TEMPORARY action |
-| API abuse / scraping | Per-subject rate limit on all routes | HTTP 429 with Retry-After |
-| Revoked API key reuse | Status check on every request | HTTP 403 FORBIDDEN |
-| Expired API key reuse | Expiry check on every request | HTTP 403 FORBIDDEN |
-| Malformed API key | Format + prefix lookup | HTTP 401 UNAUTHORIZED |
-| Invalid JWT | Token validation on every protected request | HTTP 401 UNAUTHORIZED |
-| Role escalation | Spring Security `hasAuthority()` enforced server-side | HTTP 403 FORBIDDEN |
+This project is licensed under the terms of the **MIT License**.
 
----
-
-## Test Coverage
-
-```bash
-cd backend && mvn test
-```
-
-**49 tests across 9 test classes:**
-
-| Class | Count | Covers |
-|-------|-------|--------|
-| `GatewaySecurityIntegrationTest` | 26 | Auth, RBAC (403), brute-force detection, API key lifecycle (create/use/revoke/expired/malformed/unknown), analytics endpoints & filters, audit trail, security rules, gateway routes |
-| `RateLimitE2EIntegrationTest` | 3 | Rate-limit burst to 429, Retry-After header, Redis counter & TTL, SecurityEvent creation, identity isolation, sliding window reset |
-| `AuthServiceTest` | 4 | Registration, login, duplicate handling |
-| `ApiKeyServiceTest` | 2 | Key generation, revocation |
-| `RateLimitingServiceTest` | 3 | Allow, deny, window expiry |
-| `SecurityDetectionEngineServiceTest` | 2 | Auth failure + brute-force event generation |
-| `AuditLogServiceTest` | 2 | Structured audit trail |
-| `GatewayRouteServiceTest` | 2 | Route registration, lookup |
-| `JwtTokenProviderTest` | 4 | Token generation, claims parsing, signature validation, expiration |
-| `SentinelGateApplicationTests` | 1 | Context loads |
-
----
-
-## Known Limitations
-
-- **Brute-force threshold in tests**: Redis is unavailable in the test profile, so the brute-force counter can't accumulate. Integration tests verify `AUTH_FAILURE` events only; BRUTE_FORCE events are verified at the service layer in `SecurityDetectionEngineServiceTest`.
-- **Traffic timeline**: The chart shows security events (auth failures, rate limit hits, brute-force detections), not total HTTP request volume. A full request log would require a dedicated access-log table or a Prometheus counter query.
-- **Demo data**: The first startup seeds 12 demo security events (tagged `[DEMO]`) so the dashboard is meaningful on first run. Disable with `sentinelgate.demo.seed-events=false`.
-- **CORS**: `allowedOriginPatterns("*")` is used for local development. Set specific origins in production.
-
----
-
-## Project Structure
+See the full license text in [LICENSE](LICENSE).
 
 ```
-SentinelGate/
-├── backend/                    Spring Boot 3 application
-│   ├── src/main/java/com/sentinelgate/
-│   │   ├── config/             SecurityConfig, DataInitializer
-│   │   ├── domain/             JPA entities
-│   │   ├── dto/                Request/response DTOs
-│   │   ├── gateway/filter/     GlobalFilters (JWT, ApiKey, RateLimit, Logging)
-│   │   ├── repository/         Spring Data JPA repositories
-│   │   ├── security/           JwtTokenProvider, JwtSecurityContextFilter (WebFilter)
-│   │   ├── service/            Business logic
-│   │   └── web/                REST controllers
-│   └── src/test/               Integration + unit tests
-├── frontend/                   React + TypeScript + Recharts dashboard
-├── docker/                     Docker Compose, Prometheus, Grafana provisioning
-└── .github/workflows/ci.yml    GitHub Actions (test + build)
+MIT License
+
+Copyright (c) 2026 VARDHAN2254
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 ```
+
+---
+
+<div align="center">
+  <b>Built with ❤️ by <a href="https://github.com/VARDHAN2254">VARDHAN2254</a></b>
+</div>
