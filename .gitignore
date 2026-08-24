@@ -1,0 +1,57 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+.factorypath
+
+# Build Outputs
+target/
+dist/
+build/
+out/
+*.class
+*.jar
+*.war
+*.ear
+
+# Node & Frontend dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.stylelintcache
+
+# Environment variables & Local Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+
+# Database & Runtime Data
+*.log
+logs/
+*.dump
+postgres_data/
+redis_data/
+grafana_data/
+
+# Antigravity IDE & System Generated Artifacts
+.agents/
+.gemini/
+.system_generated/
+scratch/

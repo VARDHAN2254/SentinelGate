@@ -1,0 +1,56 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "API Gateway Request Throughput (RPS)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(sentinelgate_requests_total[1m])",
+          "legendFormat": "{{method}} {{status}}"
+        }
+      ]
+    },
+    {
+      "title": "Rate Limit Throttling Violations",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(sentinelgate_ratelimit_violations_total[1m])",
+          "legendFormat": "{{subject}}"
+        }
+      ]
+    },
+    {
+      "title": "Security Threat Events Detected",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(sentinelgate_security_threats_total[1m])",
+          "legendFormat": "{{event_type}} ({{severity}})"
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["sentinelgate", "security", "observability"],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "title": "SentinelGate — Gateway Telemetry & Threat Observability",
+  "uid": "sentinelgate-observability"
+}

@@ -1,0 +1,63 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: sentinelgate-backend
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/sentinelgate_db}
+    username: ${SPRING_DATASOURCE_USERNAME:sentinelgate_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:sentinelgate_password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      timeout: 2000ms
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: echo_test_route
+          uri: https://httpbin.org
+          predicates:
+            - Path=/api/v1/echo/**
+          filters:
+            - StripPrefix=2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+
+jwt:
+  secret: ${JWT_SECRET:c2VudGluZWxnYXRlX3NlY3VyZV9hcGlfZ2F0ZXdheV9zdXBlcl9zZWNyZXRfa2V5X2Zvcl9qc3RfMmU4YjRhOTM2YzE1ZmQ0ZWNmOGE3ZDI5YjM0MTY3Y2Q=}
+  expiration-ms: 86400000 # 24 hours
+  refresh-expiration-ms: 604800000 # 7 days
+
+logging:
+  level:
+    root: INFO
+    com.sentinelgate: DEBUG
+    org.springframework.cloud.gateway: INFO
+    org.springframework.security: INFO

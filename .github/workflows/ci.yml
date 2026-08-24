@@ -1,0 +1,72 @@
+name: SentinelGate CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend:
+    name: Backend — Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+          # Cache key changes when pom.xml changes, preventing stale dependency caches
+          cache-dependency-path: backend/pom.xml
+
+      - name: Run tests
+        run: |
+          cd backend
+          mvn test -B
+
+      - name: Build JAR (skip tests — already run above)
+        run: |
+          cd backend
+          mvn package -DskipTests -B
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: backend/target/surefire-reports/
+
+  frontend:
+    name: Frontend — Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Typecheck
+        run: |
+          cd frontend
+          npx tsc --noEmit
+
+      - name: Build production bundle
+        run: |
+          cd frontend
+          npm run build

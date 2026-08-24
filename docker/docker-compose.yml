@@ -1,0 +1,120 @@
+version: '3.8'
+
+# SentinelGate — Complete Docker Compose stack
+# Starts all six services: backend, frontend, postgres, redis, prometheus, grafana
+#
+# Quick start:
+#   cd docker && docker compose up --build
+#
+# Default credentials:
+#   Dashboard:  http://localhost:5173 (or the frontend port below)
+#   Grafana:    http://localhost:3000  (admin / admin)
+#   API:        http://localhost:8080
+#   Admin user: admin / AdminSecret123!  (configured via ADMIN_USERNAME/PASSWORD env vars)
+
+services:
+
+  sentinelgate-postgres:
+    image: postgres:16-alpine
+    container_name: sentinelgate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinelgate_db
+      POSTGRES_USER: sentinelgate_user
+      POSTGRES_PASSWORD: sentinelgate_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinelgate_user -d sentinelgate_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sentinelgate-redis:
+    image: redis:7-alpine
+    container_name: sentinelgate-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sentinelgate-backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: sentinelgate-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://sentinelgate-postgres:5432/sentinelgate_db
+      SPRING_DATASOURCE_USERNAME: sentinelgate_user
+      SPRING_DATASOURCE_PASSWORD: sentinelgate_password
+      SPRING_REDIS_HOST: sentinelgate-redis
+      SPRING_REDIS_PORT: 6379
+      # Override these with strong values in production:
+      JWT_SECRET: ${JWT_SECRET:-c2VudGluZWxnYXRlX3NlY3VyZV9hcGlfZ2F0ZXdheV9zdXBlcl9zZWNyZXRfa2V5X2Zvcl9qc3RfMmU4YjRhOTM2YzE1ZmQ0ZWNmOGE3ZDI5YjM0MTY3Y2Q=}
+      SENTINELGATE_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      SENTINELGATE_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-AdminSecret123!}
+      SENTINELGATE_DEMO_SEED_EVENTS: "true"
+    depends_on:
+      sentinelgate-postgres:
+        condition: service_healthy
+      sentinelgate-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/system/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  sentinelgate-frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: sentinelgate-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      sentinelgate-backend:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: sentinelgate-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: sentinelgate-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  grafana_data:
