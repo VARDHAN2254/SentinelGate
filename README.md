@@ -474,15 +474,14 @@ Please review [SECURITY.md](SECURITY.md) for vulnerability disclosure guidelines
 
 ---
 
-## 📄 License
+## 📄 License & Copyright Notice
 
-This project is licensed under the terms of the **MIT License**.  
-See the full license terms in [LICENSE](LICENSE).
+This project is licensed under the **MIT License** with full copyright protections and legal disclaimers.
+
+See the complete terms in the [LICENSE](LICENSE) file.
 
 ```
-MIT License
-
-Copyright (c) 2026 VARDHAN2254
+Copyright (c) 2026 VARDHAN2254. All Rights Reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -491,12 +490,34 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. The above copyright notice, this permission notice, and the following
+   disclaimers shall be included in all copies or substantial portions of the Software.
+
+2. TRADEMARK & ATTRIBUTION NOTICE:
+   The name "SentinelGate", associated logos, and the name "VARDHAN2254" may not
+   be used to endorse or promote products derived from this software without
+   specific prior written permission.
+
+3. SECURITY & USAGE DISCLAIMER:
+   This software is provided for architectural demonstration, API gateway routing,
+   and cybersecurity analytics purposes. Users and deployers are solely responsible
+   for configuring secure production environments, secret rotation, TLS termination,
+   and compliance with applicable data protection and cybersecurity laws.
+
+4. DISCLAIMER OF WARRANTY & LIMITATION OF LIABILITY:
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE, INCLUDING BUT NOT LIMITED TO DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING LOSS OF USE, DATA, OR PROFITS).
 ```
 
 ---
 
 <div align="center">
-  <b>Developed & Maintained with 🛡️ by <a href="https://github.com/VARDHAN2254">VARDHAN2254</a></b>
+  <b>Developed & Maintained with 🛡️ by <a href="https://github.com/VARDHAN2254">VARDHAN2254</a></b><br/>
+  <i>All rights reserved. Unauthorized commercial redistribution without attribution is prohibited.</i>
 </div>
